@@ -1,0 +1,11 @@
+# Local runtime data — contains the DeepSeek API key and the scan database.
+# NEVER commit these.
+data/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
