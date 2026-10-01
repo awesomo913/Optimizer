@@ -1,0 +1,64 @@
+name: Bug report
+description: Something isn't working right
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you give, the faster it can get fixed.
+        If this is a safety concern (a process you think should have been protected but wasn't, or vice versa),
+        please say so clearly in the title — those get priority.
+
+  - type: input
+    id: os-version
+    attributes:
+      label: Windows version
+      description: e.g. Windows 11 23H2, Windows 10 22H2
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Optimizer version
+      description: The release you downloaded/built, or the commit if built from source
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode used
+      options:
+        - Suggest only
+        - Suspend (freeze)
+        - Auto-close
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, what did you expect, what happened instead?
+      placeholder: |
+        1. Ran a Scan
+        2. Checked process X and clicked OPTIMIZE NOW
+        3. Expected: suspended
+        4. Actual: crashed with a traceback
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >-
+        Attach the last few lines of %LOCALAPPDATA%\Optimizer\logs\app.log if you have it
+        (redact anything personal, like window titles, first).
+      render: text
+    validations:
+      required: false
