@@ -2,8 +2,12 @@
 with safety overrides -> persist. Also applies the chosen optimization action."""
 from __future__ import annotations
 
+import logging
+
 from . import active_windows, config, local_models, processes, reasoners
 from .database import Database
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisResult:
@@ -146,9 +150,11 @@ def apply_action(result: AnalysisResult, pids: list[int], mode: str,
        existing) means the pid was reused by an unrelated process, or the
        original process already exited; either way, refuse.
     2. Active window / model connection — re-query active_windows and
-       local_models *now*, not just trust the scan-time flags, so a process
-       that became the foreground window or started talking to a local model
-       in the gap between scan and click is still protected.
+       local_models *immediately before acting on each pid* (not once for
+       the whole batch), so a process that became the foreground window or
+       started talking to a local model in the gap between scan and click —
+       or even between two pids in the same multi-select batch — is still
+       protected.
 
     processes.kill/suspend re-check the protected *name* and identity again
     themselves as a third, independent layer — this function's live
@@ -157,12 +163,6 @@ def apply_action(result: AnalysisResult, pids: list[int], mode: str,
     """
     outcomes: list[tuple[int, bool, str]] = []
     by_pid = {r["pid"]: r for r in result.rows}
-
-    # One live snapshot of the safety-relevant world for this whole batch —
-    # re-querying per-pid would be no more correct (it's all a snapshot in
-    # time either way) and would be needlessly slow for a multi-pid batch.
-    live_active_pids = active_windows.active_pids()
-    live_model_pids = local_models.pids_using_models()
 
     for pid in pids:
         row = by_pid.get(pid)
@@ -174,12 +174,17 @@ def apply_action(result: AnalysisResult, pids: list[int], mode: str,
             db.log_event("warning", "action",
                          f"Refused to {mode} protected/active/model-bound pid {pid}")
             continue
-        if pid in live_active_pids:
+
+        # Re-derived fresh for THIS pid, right before acting on it — not
+        # once for the whole batch — so a long multi-pid batch can't rely on
+        # a world-state snapshot that's gone stale by the time it reaches the
+        # last few pids.
+        if pid in active_windows.active_pids():
             outcomes.append((pid, False, "now has an active window — refused"))
             db.log_event("warning", "action",
                          f"Refused to {mode} pid {pid}: became active since scan")
             continue
-        if pid in live_model_pids:
+        if pid in local_models.pids_using_models():
             outcomes.append((pid, False, "now connected to a local model — refused"))
             db.log_event("warning", "action",
                          f"Refused to {mode} pid {pid}: became model-bound since scan")
@@ -216,12 +221,19 @@ def load_suspended(db: Database) -> dict[int, dict]:
         pid, name, create_time = entry["pid"], entry["name"], entry["create_time"]
         if processes.is_same_process(pid, create_time):
             live[pid] = {"name": name, "create_time": create_time}
-        else:
+            continue
+        try:
             db.remove_suspended(pid)
-            db.log_event(
-                "info", "action",
-                f"Dropped stale suspended-process entry for pid {pid} ({name}): "
-                "no longer the same process")
+        except Exception:
+            # A DB hiccup here must not abort startup (this runs from
+            # gui.OptimizerApp.__init__) or skip validating the rest of the
+            # persisted list — log and keep going; the stale entry will
+            # simply be re-validated (and retried) next startup.
+            logger.exception("Failed to remove stale suspended entry for pid %s", pid)
+        db.log_event(
+            "info", "action",
+            f"Dropped stale suspended-process entry for pid {pid} ({name}): "
+            "no longer the same process")
     return live
 
 

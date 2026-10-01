@@ -63,7 +63,7 @@ def test_kill_refuses_protected_process(monkeypatch):
     fake = FakeProcess(name="lsass.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.kill(999)
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert "protected" in msg
@@ -74,7 +74,7 @@ def test_suspend_refuses_protected_process(monkeypatch):
     fake = FakeProcess(name="MsMpEng.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.suspend(999)
+    ok, msg = processes.suspend(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert "protected" in msg
@@ -86,7 +86,7 @@ def test_kill_refuses_model_runner_by_exe_hint(monkeypatch):
                        exe=r"C:\Users\me\AppData\Local\Programs\LM Studio\app.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.kill(999)
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert fake.terminated is False
@@ -96,7 +96,7 @@ def test_kill_ordinary_process_terminates(monkeypatch):
     fake = FakeProcess(name="notepad.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.kill(999)
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
 
     assert ok is True
     assert fake.terminated is True
@@ -107,7 +107,7 @@ def test_suspend_ordinary_process_suspends(monkeypatch):
     fake = FakeProcess(name="chrome.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.suspend(999)
+    ok, msg = processes.suspend(999, REAL_CREATE_TIME)
 
     assert ok is True
     assert fake.suspended is True
@@ -118,7 +118,7 @@ def test_kill_handles_already_gone(monkeypatch):
         raise psutil.NoSuchProcess(pid)
     monkeypatch.setattr(psutil, "Process", raiser)
 
-    ok, msg = processes.kill(999)
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
 
     assert ok is True
     assert "already gone" in msg
@@ -129,7 +129,7 @@ def test_suspend_handles_already_gone(monkeypatch):
         raise psutil.NoSuchProcess(pid)
     monkeypatch.setattr(psutil, "Process", raiser)
 
-    ok, msg = processes.suspend(999)
+    ok, msg = processes.suspend(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert "no such process" in msg
@@ -140,7 +140,7 @@ def test_kill_handles_access_denied(monkeypatch):
     fake.terminate = lambda: (_ for _ in ()).throw(psutil.AccessDenied(1234))
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.kill(999)
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert "AccessDenied" in msg
@@ -150,7 +150,7 @@ def test_resume_calls_resume_on_the_process(monkeypatch):
     fake = FakeProcess(name="chrome.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.resume(999)
+    ok, msg = processes.resume(999, REAL_CREATE_TIME)
 
     assert ok is True
     assert fake.resumed is True
@@ -162,7 +162,7 @@ def test_resume_handles_no_such_process(monkeypatch):
         raise psutil.NoSuchProcess(pid)
     monkeypatch.setattr(psutil, "Process", raiser)
 
-    ok, msg = processes.resume(999)
+    ok, msg = processes.resume(999, REAL_CREATE_TIME)
 
     assert ok is False
     assert "no such process" in msg
@@ -175,7 +175,7 @@ def test_resume_is_never_blocked_by_the_protected_list(monkeypatch):
     fake = FakeProcess(name="lsass.exe")  # even a protected name...
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.resume(999)
+    ok, msg = processes.resume(999, REAL_CREATE_TIME)
 
     assert ok is True
     assert fake.resumed is True
@@ -190,7 +190,7 @@ def test_pid_argument_is_passed_through(monkeypatch, fn):
         return FakeProcess()
     monkeypatch.setattr(psutil, "Process", fake_process)
 
-    fn(4321)
+    fn(4321, REAL_CREATE_TIME)
 
     assert seen["pid"] == 4321
 
@@ -286,7 +286,7 @@ def test_kill_refuses_own_pid_even_with_an_ordinary_looking_name(monkeypatch):
     fake = FakeProcess(name="totally_normal_app.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.kill(os.getpid())
+    ok, msg = processes.kill(os.getpid(), REAL_CREATE_TIME)
 
     assert ok is False
     assert "protected" in msg
@@ -297,7 +297,7 @@ def test_suspend_refuses_parent_pid(monkeypatch):
     fake = FakeProcess(name="totally_normal_app.exe")
     monkeypatch.setattr(psutil, "Process", lambda pid: fake)
 
-    ok, msg = processes.suspend(os.getppid())
+    ok, msg = processes.suspend(os.getppid(), REAL_CREATE_TIME)
 
     assert ok is False
     assert "protected" in msg
@@ -320,3 +320,45 @@ def test_is_protected_does_not_flag_an_unrelated_pid():
     unrelated_pid = os.getpid() + 1  # not guaranteed to exist; identity-only check
     assert processes._is_protected("notepad.exe", r"C:\Windows\notepad.exe",
                                    pid=unrelated_pid) is False
+
+
+# ---- kill() timeout fallback message ------------------------------------------
+
+def test_kill_reports_force_killed_when_terminate_times_out(monkeypatch):
+    """terminate() asks nicely; if the process doesn't exit within the wait
+    timeout, kill() falls back to a hard kill(). The caller (and whatever log/
+    UI shows the result) should be able to tell these two outcomes apart."""
+    fake = FakeProcess(name="notepad.exe")
+    fake.wait = lambda timeout=None: (_ for _ in ()).throw(psutil.TimeoutExpired(999))
+    monkeypatch.setattr(psutil, "Process", lambda pid: fake)
+
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
+
+    assert ok is True
+    assert fake.killed is True, "the hard-kill fallback must actually have been called"
+    assert msg == "force-killed after timeout"
+
+
+def test_kill_reports_plain_terminated_when_no_timeout(monkeypatch):
+    fake = FakeProcess(name="notepad.exe")
+    monkeypatch.setattr(psutil, "Process", lambda pid: fake)
+
+    ok, msg = processes.kill(999, REAL_CREATE_TIME)
+
+    assert ok is True
+    assert fake.killed is False
+    assert msg == "terminated"
+
+
+# ---- is_permanently_stale ------------------------------------------------------
+
+def test_is_permanently_stale_true_for_gone_or_reused():
+    assert processes.is_permanently_stale("no such process") is True
+    assert processes.is_permanently_stale(
+        "pid was reused by a different process since scan") is True
+
+
+def test_is_permanently_stale_false_for_retryable_failures():
+    assert processes.is_permanently_stale("AccessDenied: [Errno 5] denied") is False
+    assert processes.is_permanently_stale("protected process refused") is False
+    assert processes.is_permanently_stale("") is False

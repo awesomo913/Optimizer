@@ -3,8 +3,24 @@ real data/optimizer.db)."""
 from __future__ import annotations
 
 import json
+import sqlite3
+from contextlib import contextmanager
 
 from tests.conftest import make_row
+
+
+@contextmanager
+def _broken_conn(db):
+    """Make db._conn() raise, simulating a locked/corrupt DB file, for
+    exactly the duration of the `with` block."""
+    def raiser():
+        raise sqlite3.OperationalError("database is locked")
+    original = db._conn
+    db._conn = raiser
+    try:
+        yield
+    finally:
+        db._conn = original
 
 
 def test_start_scan_returns_an_id_and_persists_fields(db):
@@ -142,3 +158,63 @@ def test_stats_counts_scans_snapshots_and_actions(db):
     assert stats["killed"] == 1
     assert stats["suspended"] == 1
     assert stats["errors"] == 1
+
+
+# ---- DB failures must never propagate (repo-wide DB error convention) -------
+# A locked file, a full disk, or schema drift must degrade gracefully (log a
+# warning, return a safe fallback) rather than crash whatever scan/action/
+# startup path is in progress. Every write/read method is checked here.
+
+def test_start_scan_returns_none_on_db_failure_without_raising(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        result = db.start_scan("suggest", "", [], 0, "heuristic")
+    assert result is None
+    assert any("start_scan" in r.message for r in caplog.records)
+
+
+def test_add_process_snapshot_returns_none_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        result = db.add_process_snapshot(1, make_row(pid=1))
+    assert result is None
+    assert any("add_process_snapshot" in r.message for r in caplog.records)
+
+
+def test_update_action_does_not_raise_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        db.update_action(1, "killed")  # must not raise
+    assert any("update_action" in r.message for r in caplog.records)
+
+
+def test_log_model_status_does_not_raise_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        db.log_model_status("ollama", "x", True, True, False)
+    assert any("log_model_status" in r.message for r in caplog.records)
+
+
+def test_log_event_does_not_raise_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        db.log_event("info", "scan", "hello")  # must not raise
+    assert any("log_event" in r.message for r in caplog.records)
+
+
+def test_recent_events_returns_empty_list_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        result = db.recent_events()
+    assert result == []
+    assert any("recent_events" in r.message for r in caplog.records)
+
+
+def test_stats_returns_empty_dict_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        result = db.stats()
+    assert result == {}
+    assert any("stats" in r.message for r in caplog.records)
+
+
+def test_list_suspended_returns_empty_list_on_db_failure(db, caplog):
+    with _broken_conn(db), caplog.at_level("WARNING"):
+        result = db.list_suspended()
+    assert result == []
+    assert any("list_suspended" in r.message for r in caplog.records)
+
+

@@ -127,7 +127,16 @@ def is_same_process(pid: int, expected_create_time: float | None) -> bool:
     return p is not None
 
 
-def kill(pid: int, expected_create_time: float | None = None) -> tuple[bool, str]:
+# kill/suspend/resume take expected_create_time as a REQUIRED positional
+# argument deliberately — not `= None`. A default would let a caller forget
+# to pass it and silently get no PID-reuse protection at all, which defeats
+# the entire point of this module. Every real caller (analyzer.apply_action,
+# analyzer.resume_pids) always has a recorded create_time from a scan or the
+# persisted suspended-processes list; if you ever find yourself with no
+# create_time to pass, that's a sign the caller is missing a scan step, not a
+# reason to make this optional again.
+
+def kill(pid: int, expected_create_time: float | None) -> tuple[bool, str]:
     p, reason = _resolve_live(pid, expected_create_time)
     if p is None:
         if reason == _GONE:
@@ -139,16 +148,17 @@ def kill(pid: int, expected_create_time: float | None = None) -> tuple[bool, str
         p.terminate()
         try:
             p.wait(timeout=3)
+            return True, "terminated"
         except psutil.TimeoutExpired:
             p.kill()
-        return True, "terminated"
+            return True, "force-killed after timeout"
     except psutil.NoSuchProcess:
         return True, "already gone"
     except (psutil.AccessDenied, OSError) as e:
         return False, f"{type(e).__name__}: {e}"
 
 
-def suspend(pid: int, expected_create_time: float | None = None) -> tuple[bool, str]:
+def suspend(pid: int, expected_create_time: float | None) -> tuple[bool, str]:
     p, reason = _resolve_live(pid, expected_create_time)
     if p is None:
         if reason == _GONE:
@@ -165,7 +175,24 @@ def suspend(pid: int, expected_create_time: float | None = None) -> tuple[bool, 
         return False, f"{type(e).__name__}: {e}"
 
 
-def resume(pid: int, expected_create_time: float | None = None) -> tuple[bool, str]:
+# Failure messages that mean "this entry can never succeed, stop retrying it"
+# — the process is gone or the pid now belongs to something else — as opposed
+# to a transient/retryable failure like AccessDenied. Shared so callers (the
+# GUI's resume flow) don't have to duplicate/guess at this wording.
+PERMANENTLY_STALE_REASONS = frozenset({
+    "no such process",
+    "pid was reused by a different process since scan",
+})
+
+
+def is_permanently_stale(reason: str) -> bool:
+    """True if a kill/suspend/resume failure message means the pid can never
+    succeed again (gone, or reused by an unrelated process) — vs. a
+    transient failure (e.g. AccessDenied) that might succeed on retry."""
+    return reason in PERMANENTLY_STALE_REASONS
+
+
+def resume(pid: int, expected_create_time: float | None) -> tuple[bool, str]:
     """Un-suspend a process. Unlike kill/suspend, there's no protected-name
     gate here (resuming can't make the system worse off) — but identity is
     still verified: if the pid has been reused since we suspended it, resuming

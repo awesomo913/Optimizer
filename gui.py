@@ -13,7 +13,7 @@ import tkinter as tk
 import traceback
 from tkinter import messagebox, ttk
 
-from . import analyzer, assistant, config
+from . import analyzer, assistant, config, processes
 from .database import Database
 
 logger = logging.getLogger(__name__)
@@ -421,10 +421,19 @@ class OptimizerApp:
                 if mode == "suspend":
                     create_time = row.get("create_time")
                     self._suspended[pid] = {"name": name, "create_time": create_time}
-                    self.db.record_suspended(pid, name, create_time)
+                    try:
+                        self.db.record_suspended(pid, name, create_time)
+                    except Exception:
+                        # A DB write failure here must not abort the loop —
+                        # the process IS suspended either way; worst case
+                        # Resume Suspended only tracks it for this session
+                        # (in self._suspended) instead of across a restart.
+                        logger.exception(
+                            "Failed to persist suspended state for pid %s (%s)",
+                            pid, name)
                 elif mode == "kill":
                     self._suspended.pop(pid, None)
-                    self.db.remove_suspended(pid)
+                    self._safe_remove_suspended(pid, name)
             else:
                 failed.append(f"{name} ({msg})")
         self._refresh_resume_button()
@@ -457,6 +466,17 @@ class OptimizerApp:
         n = len(self._suspended)
         self.resume_btn.config(text=f"Resume Suspended ({n})",
                                state="normal" if n else "disabled")
+
+    def _safe_remove_suspended(self, pid: int, name: str) -> None:
+        """db.remove_suspended wrapped so a DB hiccup can't abort whatever
+        loop (optimize results, resume results) is calling this — the
+        in-memory self._suspended is already the source of truth for the
+        running session either way."""
+        try:
+            self.db.remove_suspended(pid)
+        except Exception:
+            logger.exception(
+                "Failed to clear suspended-state record for pid %s (%s)", pid, name)
 
     def on_resume_all(self) -> None:
         if self._busy or not self._suspended:
@@ -493,9 +513,19 @@ class OptimizerApp:
             name = info.get("name", str(pid))
             if ok:
                 self._suspended.pop(pid, None)
-                self.db.remove_suspended(pid)
+                self._safe_remove_suspended(pid, name)
                 resumed.append(name)
+            elif processes.is_permanently_stale(msg):
+                # The process is gone, or its pid has been reused by
+                # something else since we suspended it — resuming will never
+                # succeed. Drop it the same way load_suspended() drops a
+                # stale entry on startup, rather than offering it forever.
+                self._suspended.pop(pid, None)
+                self._safe_remove_suspended(pid, name)
+                failed.append(f"{name} ({msg}) — dropped, won't retry")
             else:
+                # Retryable (e.g. AccessDenied) — keep it in self._suspended
+                # so the next "Resume Suspended" click tries again.
                 failed.append(f"{name} ({msg})")
         self._refresh_resume_button()
         lines = [f"Resumed {len(resumed)} process(es)."]

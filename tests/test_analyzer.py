@@ -11,6 +11,8 @@ network call is ever touched by this file.
 """
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from Optimizer import analyzer, processes
 
@@ -210,6 +212,59 @@ def test_apply_action_proceeds_when_live_state_is_still_clear(monkeypatch, db):
     assert outcomes == [(1010, True, "terminated")]
 
 
+def test_apply_action_rederives_live_state_per_pid_not_once_per_batch(monkeypatch, db):
+    """Coordinator finding: re-query active_windows/local_models right before
+    EACH pid's action, not once for the whole batch. Simulate a process that
+    becomes active in the gap between the first and second pid in the same
+    multi-select batch — the second pid must still be refused."""
+    row_a = make_row(pid=1, name="a.exe")
+    row_b = make_row(pid=2, name="b.exe")
+    active_calls = []
+
+    def fake_active_pids():
+        active_calls.append(len(active_calls))
+        # Pid 2 "becomes" active only starting on the SECOND call -- if
+        # apply_action only queried this once up front, it would never see
+        # pid 2 as active and would (incorrectly) kill it.
+        return {2} if len(active_calls) >= 2 else set()
+
+    monkeypatch.setattr(analyzer.active_windows, "active_pids", fake_active_pids)
+    killed = []
+    monkeypatch.setattr(
+        processes, "kill",
+        lambda pid, ct=None: killed.append(pid) or (True, "terminated"))
+
+    outcomes = analyzer.apply_action(_FakeResult([row_a, row_b]), [1, 2], "kill", db)
+
+    assert len(active_calls) >= 2, "active_pids() must be queried at least once per pid"
+    assert killed == [1], "pid 2 must never reach processes.kill once live-active"
+    assert outcomes == [
+        (1, True, "terminated"),
+        (2, False, "now has an active window — refused"),
+    ]
+
+
+def test_apply_action_rederives_model_connection_per_pid(monkeypatch, db):
+    row_a = make_row(pid=10, name="a.exe")
+    row_b = make_row(pid=20, name="b.exe")
+    model_calls = []
+
+    def fake_model_pids():
+        model_calls.append(len(model_calls))
+        return {20} if len(model_calls) >= 2 else set()
+
+    monkeypatch.setattr(analyzer.local_models, "pids_using_models", fake_model_pids)
+    suspended = []
+    monkeypatch.setattr(processes, "suspend",
+                        lambda pid, ct=None: suspended.append(pid) or (True, "suspended"))
+
+    outcomes = analyzer.apply_action(_FakeResult([row_a, row_b]), [10, 20], "suspend", db)
+
+    assert len(model_calls) >= 2
+    assert suspended == [10]
+    assert outcomes[1] == (20, False, "now connected to a local model — refused")
+
+
 # ---- resume_pids ---------------------------------------------------------------
 
 def test_resume_pids_calls_processes_resume_with_pid_and_create_time(monkeypatch, db):
@@ -273,6 +328,23 @@ def test_load_suspended_handles_a_mix_of_valid_and_stale_entries(monkeypatch, db
 
     assert live == {1: {"name": "still-suspended.exe", "create_time": 1.0}}
     assert [e["pid"] for e in db.list_suspended()] == [1]
+
+
+def test_load_suspended_survives_a_db_failure_while_dropping_a_stale_entry(monkeypatch, db):
+    """load_suspended runs from gui.OptimizerApp.__init__ (startup). If
+    db.remove_suspended() throws while clearing a stale entry, that must not
+    crash app startup or stop the rest of the list from being validated."""
+    db.record_suspended(pid=1, name="stale.exe", create_time=1.0)
+    db.record_suspended(pid=2, name="still-good.exe", create_time=2.0)
+    monkeypatch.setattr(processes, "is_same_process", lambda pid, ct: pid == 2)
+
+    def raising_remove(pid):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(db, "remove_suspended", raising_remove)
+
+    live = analyzer.load_suspended(db)  # must not raise
+
+    assert live == {2: {"name": "still-good.exe", "create_time": 2.0}}
 
 
 def test_resume_pids_refuses_a_reused_pid(monkeypatch, db):
