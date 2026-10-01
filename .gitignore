@@ -6,6 +6,36 @@ data/
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 *.egg-info/
 .venv/
+.venv-build/
 venv/
+
+# PyInstaller build output
+dist/
+build/
+*.spec
+
+# Test / lint artifacts
+.pytest_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Local AI dev tooling / internal notes — not part of the published project
+.claude/
+CLAUDE.md
+AUDIT.md
