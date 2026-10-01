@@ -1,0 +1,72 @@
+<svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="Scan your windows and processes, then reason locally or via an optional cloud key, then apply only what clears three safety gates, then you can resume anything suspended.">
+  <rect width="1200" height="320" fill="#12161f"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#4d6a8a"/>
+    </marker>
+  </defs>
+
+  <!-- Step 1 -->
+  <g transform="translate(40,70)">
+    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
+    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
+          font-weight="700" fill="#e6edf3">1. Scan</text>
+    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">Your active windows,</text>
+    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">running processes, and</text>
+    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">any local AI models in use</text>
+    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
+          fill="#4ecca3">100% local, no network</text>
+  </g>
+  <line x1="285" y1="155" x2="330" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Step 2 -->
+  <g transform="translate(335,70)">
+    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
+    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
+          font-weight="700" fill="#e6edf3">2. Reason</text>
+    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">Local model (Ollama/LM</text>
+    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">Studio) if running, else</text>
+    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">offline heuristics</text>
+    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
+          fill="#a67c00">DeepSeek cloud only if you add a key</text>
+  </g>
+  <line x1="580" y1="155" x2="625" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Step 3 -->
+  <g transform="translate(630,70)">
+    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
+    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
+          font-weight="700" fill="#e6edf3">3. Safety gate</text>
+    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">Protected, active-window,</text>
+    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">and model-connected</text>
+    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">processes are never touched</text>
+    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
+          fill="#4ecca3">checked 3 times, every time</text>
+  </g>
+  <line x1="875" y1="155" x2="920" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Step 4 -->
+  <g transform="translate(925,70)">
+    <rect width="235" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
+    <text x="117" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
+          font-weight="700" fill="#e6edf3">4. You decide</text>
+    <text x="117" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">You check boxes and click</text>
+    <text x="117" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">OPTIMIZE — suspend</text>
+    <text x="117" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
+          fill="#8899aa">(reversible) or close</text>
+    <text x="117" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
+          fill="#4ecca3">nothing happens automatically</text>
+  </g>
+</svg>
