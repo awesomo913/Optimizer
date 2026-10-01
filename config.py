@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import sys
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -69,3 +71,42 @@ def set_deepseek_key(key: str) -> None:
     cfg = load_config()
     cfg["deepseek_api_key"] = key.strip()
     save_config(cfg)
+
+
+def log_file_path() -> Path:
+    """Where the app writes its log (Windows: %LOCALAPPDATA%/Optimizer/logs)."""
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "state")
+    return Path(base) / "Optimizer" / "logs" / "app.log"
+
+
+def setup_logging() -> Path | None:
+    """Log to a file (always) and to stderr when one exists.
+
+    A windowed exe (built with PyInstaller's --windowed flag) has no stderr,
+    so without the file handler every log line would be silently dropped.
+    Returns the log path, or None if it could not be created (logging then
+    falls back to stderr only, if stderr exists)."""
+    if getattr(setup_logging, "_done", False):
+        return log_file_path()
+    setup_logging._done = True  # type: ignore[attr-defined]
+
+    fmt = logging.Formatter("%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+                            "%Y-%m-%d %H:%M:%S")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+
+    if sys.stderr is not None:
+        stream = logging.StreamHandler()
+        stream.setFormatter(fmt)
+        root.addHandler(stream)
+
+    path = log_file_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(path, encoding="utf-8")
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Could not open log file %s: %s", path, exc)
+        return None
+    handler.setFormatter(fmt)
+    root.addHandler(handler)
+    return path

@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from . import config
 
@@ -92,9 +93,11 @@ class Database:
             )
             return cur.lastrowid
 
-    def add_process_snapshot(self, scan_id: int, row: dict[str, Any]) -> None:
+    def add_process_snapshot(self, scan_id: int, row: dict[str, Any]) -> int:
+        """Insert one process snapshot row, returning its new row id so the
+        caller can later update `action_taken` once an action is applied."""
         with self._conn() as c:
-            c.execute(
+            cur = c.execute(
                 "INSERT INTO process_snapshots (scan_id, pid, name, exe, cpu, mem_mb, "
                 "status, is_active, uses_local_model, protected, recommendation, "
                 "confidence, reason, action_taken) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -108,6 +111,7 @@ class Database:
                     row.get("reason"), row.get("action_taken", "none"),
                 ),
             )
+            return cur.lastrowid
 
     def update_action(self, snapshot_id: int, action: str) -> None:
         with self._conn() as c:
@@ -150,6 +154,8 @@ class Database:
                 "snapshots": n("SELECT COUNT(*) FROM process_snapshots"),
                 "events": n("SELECT COUNT(*) FROM events"),
                 "errors": n("SELECT COUNT(*) FROM events WHERE level='error'"),
-                "killed": n("SELECT COUNT(*) FROM process_snapshots WHERE action_taken='killed'"),
-                "suspended": n("SELECT COUNT(*) FROM process_snapshots WHERE action_taken='suspended'"),
+                "killed": n("SELECT COUNT(*) FROM process_snapshots "
+                           "WHERE action_taken='killed'"),
+                "suspended": n("SELECT COUNT(*) FROM process_snapshots "
+                              "WHERE action_taken='suspended'"),
             }

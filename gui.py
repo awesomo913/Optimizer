@@ -6,18 +6,31 @@ Heavy work (scanning, model calls) runs on worker threads so the UI never freeze
 """
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import tkinter as tk
+import traceback
 from tkinter import messagebox, ttk
 
 from . import analyzer, assistant, config
 from .database import Database
 
+logger = logging.getLogger(__name__)
+
+
+def _log_tk_callback_error(exc, val, tb) -> None:
+    """Tkinter swallows exceptions raised inside widget callbacks by default
+    (it just prints to stderr, which doesn't exist for a --windowed exe).
+    Route them into the same log file as everything else instead."""
+    logger.error("Unhandled error in Tk callback:\n%s",
+                 "".join(traceback.format_exception(exc, val, tb)))
+
 
 class OptimizerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        root.report_callback_exception = _log_tk_callback_error
         self.db = Database()
         self.result: analyzer.AnalysisResult | None = None
         self.mode = tk.StringVar(value="suggest")
@@ -25,6 +38,8 @@ class OptimizerApp:
         self._chat_busy = False
         self._chat_history: list[dict] = []     # {'role','content'}
         self._chat_q: queue.Queue = queue.Queue()
+        self._suspended: dict[int, str] = {}    # pid -> name, for "Resume all"
+        self._resume_q: queue.Queue = queue.Queue()
 
         root.title("Local Device Optimizer")
         root.geometry("1280x740")
@@ -54,6 +69,9 @@ class OptimizerApp:
         self.optimize_btn.pack(side="left", padx=4)
         ttk.Button(bar, text="Ask AI about checked",
                    command=self.ask_about_checked).pack(side="left", padx=4)
+        self.resume_btn = ttk.Button(bar, text="Resume Suspended (0)",
+                                     command=self.on_resume_all, state="disabled")
+        self.resume_btn.pack(side="left", padx=4)
 
         ttk.Button(bar, text="Set DeepSeek Key…",
                    command=self.on_set_key).pack(side="right", padx=4)
@@ -205,7 +223,7 @@ class OptimizerApp:
     def on_set_key(self) -> None:
         win = tk.Toplevel(self.root)
         win.title("DeepSeek API Key")
-        win.geometry("460x140")
+        win.geometry("460x220")
         win.transient(self.root)
         ttk.Label(win, text="Enter your DeepSeek API key (stored locally):",
                   padding=10).pack(anchor="w")
@@ -213,12 +231,33 @@ class OptimizerApp:
         entry.pack(padx=10, fill="x")
         entry.insert(0, config.get_deepseek_key() or "")
 
+        ttk.Label(
+            win, wraplength=430, justify="left", foreground="#a60",
+            text=("Privacy: DeepSeek is strictly opt-in. Leave this blank and "
+                  "the optimizer only ever uses a local model (Ollama/LM Studio) "
+                  "or built-in offline heuristics — nothing leaves your machine. "
+                  "If you set a key here, the names of your running processes "
+                  "and your window titles (which can contain document or page "
+                  "names) are sent to DeepSeek's cloud API with every scan and "
+                  "chat message. The key itself is stored in plaintext in "
+                  "data/config.json (gitignored, never uploaded)."),
+        ).pack(padx=10, pady=(8, 0), anchor="w")
+
         def save():
             config.set_deepseek_key(entry.get())
             self._refresh_key_state()
             win.destroy()
 
-        ttk.Button(win, text="Save", command=save).pack(pady=10)
+        def clear():
+            config.set_deepseek_key("")
+            self._refresh_key_state()
+            win.destroy()
+
+        btns = ttk.Frame(win)
+        btns.pack(pady=10)
+        ttk.Button(btns, text="Save", command=save).pack(side="left", padx=4)
+        ttk.Button(btns, text="Clear / go offline-only",
+                   command=clear).pack(side="left", padx=4)
         entry.focus_set()
 
     # ---- scan ---------------------------------------------------------------
@@ -232,14 +271,20 @@ class OptimizerApp:
         try:
             result = analyzer.analyze(self.mode.get(), self.db)
         except Exception as e:
-            self.db.log_event("error", "scan", f"Analysis crashed: {e}")
-            self.root.after(0, lambda: self._scan_failed(e))
+            # `except ... as e` implicitly `del`s e when this block exits, so
+            # it must not be captured by a lambda that outlives the block
+            # (Tk's `after` runs it later, on the main thread) — capture the
+            # message as a plain string instead.
+            msg = str(e)
+            logger.exception("Analysis crashed")
+            self.db.log_event("error", "scan", f"Analysis crashed: {msg}")
+            self.root.after(0, lambda: self._scan_failed(msg))
             return
         self.root.after(0, lambda: self._scan_done(result))
 
-    def _scan_failed(self, err: Exception) -> None:
+    def _scan_failed(self, err: str) -> None:
         self._set_busy(False, f"Scan failed: {err}")
-        messagebox.showerror("Scan failed", str(err))
+        messagebox.showerror("Scan failed", err)
 
     def _scan_done(self, result: analyzer.AnalysisResult) -> None:
         prev_closable = len(self.result.closable) if self.result else None
@@ -292,7 +337,8 @@ class OptimizerApp:
         self.status.set(
             f"Active: {result.foreground or '—'}  •  {n_close} closable, "
             f"~{reclaim:.0f} MB reclaimable.{delta} "
-            f"{'Review & OPTIMIZE NOW, or ask the assistant.' if n_close else 'System looks lean.'}")
+            + ("Review & OPTIMIZE NOW, or ask the assistant."
+               if n_close else "System looks lean."))
         self._set_busy(False)
 
     # ---- optimize -----------------------------------------------------------
@@ -326,11 +372,23 @@ class OptimizerApp:
                 "NOW to act.")
             return
 
-        verb = "suspend (freeze)" if mode == "suspend" else "close"
+        names = sorted({r["name"] for r in self.result.rows if r["pid"] in pids})
+        shown = ", ".join(names[:12]) + (f", +{len(names) - 12} more" if len(names) > 12 else "")
+        if mode == "suspend":
+            verb = "suspend (freeze)"
+            risk_note = ("Suspended processes stop using CPU immediately but keep "
+                        "their memory; use \"Resume Suspended\" any time to bring "
+                        "them back exactly where they left off.")
+        else:
+            verb = "close"
+            risk_note = ("This closes the process outright. Any unsaved work in "
+                        "that program may be lost. Prefer Suspend if you're not sure.")
         if not messagebox.askyesno(
                 "Confirm optimize",
-                f"About to {verb} {len(pids)} processes.\n\nProtected, active, and "
-                "model-bound processes are automatically skipped. Continue?"):
+                f"About to {verb} {len(pids)} process(es):\n\n{shown}\n\n{risk_note}\n\n"
+                "Protected, active (has a visible window), and model-bound "
+                "processes are automatically skipped regardless of what's checked. "
+                "Continue?"):
             return
         self._set_busy(True, f"Applying ({mode})…")
         threading.Thread(target=self._optimize_worker, args=(pids, mode),
@@ -349,8 +407,13 @@ class OptimizerApp:
             if ok:
                 done.append(name)
                 reclaimed += row.get("mem_mb", 0)
+                if mode == "suspend":
+                    self._suspended[pid] = name
+                elif mode == "kill":
+                    self._suspended.pop(pid, None)
             else:
                 failed.append(f"{name} ({msg})")
+        self._refresh_resume_button()
 
         verb = "Suspended" if mode == "suspend" else "Closed"
         lines = [f"{verb} {len(done)} processes, freeing ~{reclaimed:.0f} MB."]
@@ -367,6 +430,46 @@ class OptimizerApp:
         self.status.set(f"{verb} {len(done)}, freed ~{reclaimed:.0f} MB, "
                         f"{len(failed)} skipped. Logged to DB. Re-scanning…")
         self.root.after(200, self.on_scan)  # rescan -> table shows new state
+
+    # ---- resume ---------------------------------------------------------------
+    def _refresh_resume_button(self) -> None:
+        n = len(self._suspended)
+        self.resume_btn.config(text=f"Resume Suspended ({n})",
+                               state="normal" if n else "disabled")
+
+    def on_resume_all(self) -> None:
+        if self._busy or not self._suspended:
+            return
+        pids = list(self._suspended)
+        self._set_busy(True, f"Resuming {len(pids)} suspended process(es)…")
+        threading.Thread(target=self._resume_worker, args=(pids,),
+                         daemon=True).start()
+        self.root.after(80, self._poll_resume)
+
+    def _resume_worker(self, pids: list[int]) -> None:
+        outcomes = analyzer.resume_pids(pids, self.db)
+        self._resume_q.put(outcomes)
+
+    def _poll_resume(self) -> None:
+        try:
+            outcomes = self._resume_q.get_nowait()
+        except queue.Empty:
+            self.root.after(80, self._poll_resume)
+            return
+        resumed, failed = [], []
+        for pid, ok, msg in outcomes:
+            name = self._suspended.pop(pid, str(pid))
+            (resumed if ok else failed).append(f"{name} ({msg})" if not ok else name)
+        self._refresh_resume_button()
+        lines = [f"Resumed {len(resumed)} process(es)."]
+        if resumed:
+            lines.append("  • " + ", ".join(sorted(set(resumed))))
+        if failed:
+            lines.append(f"Failed to resume {len(failed)}:")
+            lines.append("  • " + "; ".join(failed))
+        text = "\n".join(lines)
+        self._chat_add("system", text)
+        self._set_busy(False, text.splitlines()[0])
 
     # ---- assistant chat -----------------------------------------------------
     def ask_about_checked(self) -> None:
@@ -440,6 +543,7 @@ class OptimizerApp:
 
 
 def run() -> None:
+    config.setup_logging()
     root = tk.Tk()
     OptimizerApp(root)
     root.mainloop()

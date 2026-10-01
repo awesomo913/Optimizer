@@ -118,16 +118,7 @@ def analyze(mode: str, db: Database) -> AnalysisResult:
         decision = _apply_safety_overrides(row, decision)
         row.update(decision)
         # record snapshot, capture its id for later action updates
-        with db._conn() as c:
-            cur = c.execute(
-                "INSERT INTO process_snapshots (scan_id, pid, name, exe, cpu, mem_mb, "
-                "status, is_active, uses_local_model, protected, recommendation, "
-                "confidence, reason, action_taken) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (result.scan_id, row["pid"], row["name"], row["exe"], row["cpu"],
-                 row["mem_mb"], row["status"], int(row["is_active"]),
-                 int(row["uses_local_model"]), int(row["protected"]),
-                 row["recommendation"], row["confidence"], row["reason"], "none"))
-            row["snapshot_id"] = cur.lastrowid
+        row["snapshot_id"] = db.add_process_snapshot(result.scan_id, row)
         if row["recommendation"] == "suggest_close":
             db.log_event("suggestion", "scan",
                          f"{row['name']} (pid {row['pid']}): {row['reason']}",
@@ -164,4 +155,18 @@ def apply_action(result: AnalysisResult, pids: list[int], mode: str,
             db.update_action(row["snapshot_id"], action)
         db.log_event("info" if ok else "error", "action",
                      f"{mode} pid {pid} ({row['name'] if row else '?'}): {msg}")
+    return outcomes
+
+
+def resume_pids(pids: list[int], db: Database) -> list[tuple[int, bool, str]]:
+    """Un-suspend processes the optimizer previously suspended. Reversing a
+    suspend is always allowed — there is no safety gate to clear here, since
+    resuming (unlike suspend/kill) can never leave the system in a worse
+    state than before the optimizer touched it."""
+    outcomes: list[tuple[int, bool, str]] = []
+    for pid in pids:
+        ok, msg = processes.resume(pid)
+        outcomes.append((pid, ok, msg))
+        db.log_event("info" if ok else "error", "action",
+                     f"resume pid {pid}: {msg}")
     return outcomes
