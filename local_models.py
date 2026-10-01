@@ -4,6 +4,7 @@ later on demand. Everything found is logged for future tuning."""
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import urllib.error
 import urllib.request
@@ -12,6 +13,8 @@ from pathlib import Path
 import psutil
 
 from . import config
+
+logger = logging.getLogger(__name__)
 
 
 def _http_json(url: str, timeout: float = 2.0) -> dict | None:
@@ -70,8 +73,16 @@ def pids_using_models() -> set[int]:
                 port = conn.laddr.port
             if port and conn.pid:
                 using.add(conn.pid)
-    except (psutil.AccessDenied, OSError):
-        pass
+    except (psutil.AccessDenied, OSError) as e:
+        # This set feeds straight into the "never touch a model-connected
+        # process" safety gate (analyzer._apply_safety_overrides). A silent
+        # empty-set fallback here would be indistinguishable from "nothing is
+        # using a model" — log it loudly so a degraded scan (e.g. Optimizer
+        # not running elevated) is visible instead of silently weakening that
+        # protection.
+        logger.warning(
+            "Could not enumerate network connections (%s: %s) — model-connected "
+            "process protection is degraded for this scan.", type(e).__name__, e)
     return using
 
 

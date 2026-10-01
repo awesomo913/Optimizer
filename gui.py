@@ -395,7 +395,14 @@ class OptimizerApp:
                          daemon=True).start()
 
     def _optimize_worker(self, pids: list[int], mode: str) -> None:
-        outcomes = analyzer.apply_action(self.result, pids, mode, self.db)
+        try:
+            outcomes = analyzer.apply_action(self.result, pids, mode, self.db)
+        except Exception as e:
+            msg = str(e)
+            logger.exception("apply_action crashed")
+            self.db.log_event("error", "action", f"apply_action crashed: {msg}")
+            self.root.after(0, lambda: self._scan_failed(f"Optimize failed: {msg}"))
+            return
         self.root.after(0, lambda: self._optimize_done(outcomes, mode))
 
     def _optimize_done(self, outcomes, mode: str) -> None:
@@ -447,7 +454,16 @@ class OptimizerApp:
         self.root.after(80, self._poll_resume)
 
     def _resume_worker(self, pids: list[int]) -> None:
-        outcomes = analyzer.resume_pids(pids, self.db)
+        try:
+            outcomes = analyzer.resume_pids(pids, self.db)
+        except Exception as e:
+            msg = str(e)
+            logger.exception("resume_pids crashed")
+            self.db.log_event("error", "action", f"resume_pids crashed: {msg}")
+            self.root.after(0, lambda: self._scan_failed(f"Resume failed: {msg}"))
+            # Unblock _poll_resume (it's waiting on this queue) with an empty
+            # result rather than leaving it to poll forever.
+            outcomes = []
         self._resume_q.put(outcomes)
 
     def _poll_resume(self) -> None:

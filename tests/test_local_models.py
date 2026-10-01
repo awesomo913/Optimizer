@@ -51,12 +51,18 @@ def test_pids_using_models_ignores_unrelated_ports(monkeypatch):
     assert local_models.pids_using_models() == set()
 
 
-def test_pids_using_models_handles_access_denied(monkeypatch):
+def test_pids_using_models_handles_access_denied(monkeypatch, caplog):
     def raiser(kind="inet"):
         raise psutil.AccessDenied()
     monkeypatch.setattr(psutil, "net_connections", raiser)
 
-    assert local_models.pids_using_models() == set()
+    with caplog.at_level("WARNING", logger="Optimizer.local_models"):
+        result = local_models.pids_using_models()
+
+    assert result == set()
+    # A degraded safety-relevant scan must not fail silently — the model-
+    # connection protection gate depends on this set being accurate.
+    assert any("degraded" in r.message for r in caplog.records)
 
 
 def test_survey_builds_a_summary_without_crashing(monkeypatch, db):
