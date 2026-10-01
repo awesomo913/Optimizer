@@ -61,6 +61,17 @@ CREATE TABLE IF NOT EXISTS events (
     message TEXT,
     detail TEXT
 );
+
+-- Processes the app has suspended and not yet resumed. Persisted (not just
+-- in-memory) so "Resume Suspended" still works after the app is closed and
+-- reopened. create_time is what lets us tell a still-suspended process apart
+-- from a different process that was later assigned the same pid.
+CREATE TABLE IF NOT EXISTS suspended_processes (
+    pid INTEGER PRIMARY KEY,
+    name TEXT,
+    create_time REAL,
+    ts REAL NOT NULL
+);
 """
 
 
@@ -117,6 +128,29 @@ class Database:
         with self._conn() as c:
             c.execute("UPDATE process_snapshots SET action_taken=? WHERE id=?",
                       (action, snapshot_id))
+
+    # ---- suspended-process persistence ("Resume Suspended" across restarts) --
+    def record_suspended(self, pid: int, name: str, create_time: float) -> None:
+        """Remember that we suspended this process, so Resume Suspended can
+        find it again even after the app restarts."""
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO suspended_processes "
+                "(pid, name, create_time, ts) VALUES (?,?,?,?)",
+                (pid, name, create_time, time.time()))
+
+    def remove_suspended(self, pid: int) -> None:
+        """Forget a pid — call this once it's been resumed, killed, or found
+        stale (pid/create_time no longer match a real process) on reload."""
+        with self._conn() as c:
+            c.execute("DELETE FROM suspended_processes WHERE pid=?", (pid,))
+
+    def list_suspended(self) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT pid, name, create_time, ts FROM suspended_processes "
+                "ORDER BY ts").fetchall()
+        return [dict(r) for r in rows]
 
     def log_model_status(self, provider: str, model: str, available: bool,
                          can_spawn: bool, in_use: bool, note: str = "") -> None:

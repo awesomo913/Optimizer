@@ -63,3 +63,13 @@ def active_window_pids() -> dict[int, str]:
 
     user32.EnumWindows(_EnumWindowsProc(callback), 0)
     return result
+
+
+def active_pids() -> set[int]:
+    """All PIDs that currently own a visible window, plus the current
+    foreground pid. This is the single definition of "has an active window" —
+    used both at scan time and again, live, immediately before any
+    suspend/kill so a process that *became* active after the scan is still
+    protected."""
+    fg_pid, _fg_title = foreground()
+    return set(active_window_pids()) | ({fg_pid} if fg_pid else set())

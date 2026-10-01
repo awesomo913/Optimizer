@@ -93,6 +93,8 @@ def analyze(mode: str, db: Database) -> AnalysisResult:
     awins = active_windows.active_window_pids()
     result.foreground = fg_title
     result.active_windows = sorted(set(awins.values()))
+    # Same definition as active_windows.active_pids(), computed from the
+    # fg_pid/awins already fetched above so we don't call the Win32 APIs twice.
     active_pids = set(awins) | ({fg_pid} if fg_pid else set())
 
     result.model_summary = local_models.survey(db)
@@ -132,41 +134,112 @@ def analyze(mode: str, db: Database) -> AnalysisResult:
 def apply_action(result: AnalysisResult, pids: list[int], mode: str,
                  db: Database) -> list[tuple[int, bool, str]]:
     """Execute the optimization on the given pids. mode: suspend | kill.
-    suggest mode never reaches here (it just displays)."""
+    suggest mode never reaches here (it just displays).
+
+    A scan can be seconds (or, if the user steps away, much longer) old by
+    the time this runs, and pids get reused by the OS. So beyond the
+    scan-time `protected`/`is_active`/`uses_local_model` flags on each row,
+    this re-derives the safety-relevant facts live, right before acting:
+
+    1. Identity — re-fetch the process by pid and compare its create_time
+       against what the scan recorded. A mismatch (or the pid no longer
+       existing) means the pid was reused by an unrelated process, or the
+       original process already exited; either way, refuse.
+    2. Active window / model connection — re-query active_windows and
+       local_models *now*, not just trust the scan-time flags, so a process
+       that became the foreground window or started talking to a local model
+       in the gap between scan and click is still protected.
+
+    processes.kill/suspend re-check the protected *name* and identity again
+    themselves as a third, independent layer — this function's live
+    active/model re-check is what they can't do on their own (they have no
+    notion of "window" or "model connection").
+    """
     outcomes: list[tuple[int, bool, str]] = []
     by_pid = {r["pid"]: r for r in result.rows}
+
+    # One live snapshot of the safety-relevant world for this whole batch —
+    # re-querying per-pid would be no more correct (it's all a snapshot in
+    # time either way) and would be needlessly slow for a multi-pid batch.
+    live_active_pids = active_windows.active_pids()
+    live_model_pids = local_models.pids_using_models()
+
     for pid in pids:
         row = by_pid.get(pid)
-        if row and (row["protected"] or row["is_active"] or row["uses_local_model"]):
+        if row is None:
+            outcomes.append((pid, False, "unknown pid (not part of this scan)"))
+            continue
+        if row["protected"] or row["is_active"] or row["uses_local_model"]:
             outcomes.append((pid, False, "blocked by safety guard"))
             db.log_event("warning", "action",
-                         f"Refused to {mode} protected/active pid {pid}")
+                         f"Refused to {mode} protected/active/model-bound pid {pid}")
             continue
+        if pid in live_active_pids:
+            outcomes.append((pid, False, "now has an active window — refused"))
+            db.log_event("warning", "action",
+                         f"Refused to {mode} pid {pid}: became active since scan")
+            continue
+        if pid in live_model_pids:
+            outcomes.append((pid, False, "now connected to a local model — refused"))
+            db.log_event("warning", "action",
+                         f"Refused to {mode} pid {pid}: became model-bound since scan")
+            continue
+
+        create_time = row.get("create_time")
         if mode == "kill":
-            ok, msg = processes.kill(pid)
+            ok, msg = processes.kill(pid, create_time)
             action = "killed" if ok else "failed"
         elif mode == "suspend":
-            ok, msg = processes.suspend(pid)
+            ok, msg = processes.suspend(pid, create_time)
             action = "suspended" if ok else "failed"
         else:
             ok, msg, action = False, "unknown mode", "none"
         outcomes.append((pid, ok, msg))
-        if row and row.get("snapshot_id"):
+        if row.get("snapshot_id"):
             db.update_action(row["snapshot_id"], action)
         db.log_event("info" if ok else "error", "action",
-                     f"{mode} pid {pid} ({row['name'] if row else '?'}): {msg}")
+                     f"{mode} pid {pid} ({row['name']}): {msg}")
     return outcomes
 
 
-def resume_pids(pids: list[int], db: Database) -> list[tuple[int, bool, str]]:
-    """Un-suspend processes the optimizer previously suspended. Reversing a
-    suspend is always allowed — there is no safety gate to clear here, since
-    resuming (unlike suspend/kill) can never leave the system in a worse
-    state than before the optimizer touched it."""
+def load_suspended(db: Database) -> dict[int, dict]:
+    """Reload the persisted suspended-processes list (so "Resume Suspended"
+    still works after the app restarts). Each entry is re-verified against
+    the live process table — same pid AND the same create_time — because the
+    gap between "we suspended this" and "the app restarted" can be arbitrarily
+    long; the process may have exited, or its pid may have been reused by
+    something else entirely. Entries that no longer check out are dropped
+    (and removed from the DB) rather than risking a resume() on the wrong
+    process later. Returns {pid: {"name": str, "create_time": float}}."""
+    live: dict[int, dict] = {}
+    for entry in db.list_suspended():
+        pid, name, create_time = entry["pid"], entry["name"], entry["create_time"]
+        if processes.is_same_process(pid, create_time):
+            live[pid] = {"name": name, "create_time": create_time}
+        else:
+            db.remove_suspended(pid)
+            db.log_event(
+                "info", "action",
+                f"Dropped stale suspended-process entry for pid {pid} ({name}): "
+                "no longer the same process")
+    return live
+
+
+def resume_pids(entries: list[dict], db: Database) -> list[tuple[int, bool, str]]:
+    """Un-suspend processes the optimizer previously suspended.
+
+    `entries` are {"pid": int, "create_time": float, "name": str} — the
+    create_time recorded when we suspended it (loaded from the persisted
+    suspended-processes list, which survives a restart). Reversing a suspend
+    has no protected/active/model gate — there is nothing it could do that
+    makes the system worse than before the optimizer touched it — but
+    identity is still checked: if the pid has been reused since we suspended
+    it, "resuming" would act on a process we never touched, not the one we
+    suspended."""
     outcomes: list[tuple[int, bool, str]] = []
-    for pid in pids:
-        ok, msg = processes.resume(pid)
+    for entry in entries:
+        pid = entry["pid"]
+        ok, msg = processes.resume(pid, entry.get("create_time"))
         outcomes.append((pid, ok, msg))
-        db.log_event("info" if ok else "error", "action",
-                     f"resume pid {pid}: {msg}")
+        db.log_event("info" if ok else "error", "action", f"resume pid {pid}: {msg}")
     return outcomes

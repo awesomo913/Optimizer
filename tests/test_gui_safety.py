@@ -53,3 +53,19 @@ def test_deepseek_key_dialog_states_privacy_tradeoff():
     body = GUI_SRC[start:end].lower()
     assert "opt-in" in body or "optional" in body or "only" in body
     assert "deepseek" in body
+
+
+def test_suspended_processes_are_persisted_not_just_in_memory():
+    """Coordinator safety-review item 2: Resume Suspended must survive a
+    restart, so suspend/resume must go through the DB, not just a dict."""
+    assert "db.record_suspended(" in GUI_SRC
+    assert "db.remove_suspended(" in GUI_SRC
+    assert "analyzer.load_suspended(" in GUI_SRC
+    assert "_load_persisted_suspended" in GUI_SRC
+
+
+def test_startup_loads_persisted_suspended_state():
+    start = GUI_SRC.index("def __init__(self, root")
+    end = GUI_SRC.index("\n    def ", start + 1)
+    body = GUI_SRC[start:end]
+    assert "_load_persisted_suspended()" in body

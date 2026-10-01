@@ -27,6 +27,7 @@ def make_row(
     is_active: bool = False,
     uses_local_model: bool = False,
     protected: bool = False,
+    create_time: float = 1_700_000_000.0,
     **extra,
 ) -> dict:
     """Build a process-row dict shaped like processes.scan()'s output.
@@ -42,6 +43,7 @@ def make_row(
         "is_active": is_active,
         "uses_local_model": uses_local_model,
         "protected": protected,
+        "create_time": create_time,
     }
     row.update(extra)
     return row

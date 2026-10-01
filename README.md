@@ -45,18 +45,22 @@
 
 1. **Scan** — reads your active windows (via `ctypes`, no extra dependency), every running process, and which programs are talking to a local AI model server.
 2. **Reason** — DeepSeek (only if you've set a key) → a local model (Ollama/LM Studio, if running) → built-in heuristics. All three return the same shape, so the app doesn't care which one answered.
-3. **Safety gate** — protected, active-window, and model-connected processes are forced back to "needed" no matter what the reasoner said, and the apply step refuses to touch them again, and the actual kill/suspend call checks a third time right before acting.
+3. **Safety gate** — protected, active-window, and model-connected processes are forced back to "needed" no matter what the reasoner said. When you click OPTIMIZE, the app re-checks all of that *again*, live — not just the flags from the scan — plus verifies each process is still the exact process it scanned (not a different one that happens to share the same process id now), and the actual kill/suspend call checks a third time right before acting.
 4. **You decide** — nothing happens until you check rows, pick a mode, and confirm a dialog naming exactly what's about to change.
 
 ## Staying safe
 
-A tool that can close processes is only as good as its brakes. There are three, and a process has to clear all of them before it's touched:
+A tool that can close processes is only as good as its brakes. There are three layers, and a process has to clear all of them — freshly, not just at scan time — before it's touched:
 
-1. **Safety override** — protected processes are forced to "keep" regardless of what any reasoner says (`analyzer._apply_safety_overrides`).
-2. **Apply-time gate** — `apply_action` refuses any pid that's protected, tied to an active window, or connected to a local model.
-3. **Action-time gate** — `processes.kill` / `processes.suspend` re-check the protected list at the instant they act, so nothing slips through a stale recommendation.
+1. **Safety override (scan time)** — protected, active-window, and model-connected processes are forced to "keep" regardless of what any reasoner says (`analyzer._apply_safety_overrides`).
+2. **Apply-time gate (live, right before acting)** — when you click OPTIMIZE, `apply_action` refuses any pid that's protected, tied to an active window, or connected to a local model using the scan's flags, **and then re-derives both facts live** — a process that became the foreground window or started talking to a local model *after* the scan is still refused. It also re-verifies each pid's identity: every process row carries the pid's `create_time` from the scan, and a pid whose live `create_time` doesn't match (or that no longer exists) is refused — this is what stops a stale scan from acting on a *different* process that the OS has since reused the same pid for.
+3. **Action-time gate** — `processes.kill` / `processes.suspend` / `processes.resume` re-check the protected list *and* the same identity (pid + create_time) at the instant they act, so nothing slips through a stale recommendation even if something upstream were ever wrong.
 
-The protected list (`config.PROTECTED_NAMES`) covers the Windows kernel and session stack (`csrss`, `wininit`, `lsass`, `dwm`, `explorer`, …), security/AV (`MsMpEng`, Defender, SmartScreen), the local-model runners (Ollama / LM Studio), and the optimizer's own Python runtime — so it can't kill itself. All three gates are pinned by automated tests in `tests/test_safety.py`, `tests/test_analyzer.py`, and `tests/test_processes.py` — see [SECURITY.md](SECURITY.md) for the full scope notes, including exactly what the DeepSeek option sends if you turn it on.
+**Self-protection:** the optimizer can never act on its own process or its parent process (`os.getpid()` / `os.getppid()`), checked by pid regardless of what name psutil reports for it — and the frozen build's own exe name (`OptimizerGUI.exe`) is in the protected-names list too, so it can't be told to close itself by name either.
+
+The protected list (`config.PROTECTED_NAMES`) covers the Windows kernel and session stack (`csrss`, `wininit`, `lsass`, `dwm`, `explorer`, …), security/AV (`MsMpEng`, Defender, SmartScreen), the local-model runners (Ollama / LM Studio), the optimizer's own Python runtime and frozen exe name, and (by pid, not name) the optimizer's own running process and its parent. All of this is pinned by automated tests in `tests/test_safety.py`, `tests/test_analyzer.py`, and `tests/test_processes.py` — see [SECURITY.md](SECURITY.md) for the full scope notes, including exactly what the DeepSeek option sends if you turn it on.
+
+**Suspending survives a restart.** The list of processes you've suspended is saved to the local database, not just kept in memory — close and reopen the app and **Resume Suspended** still shows them (each one is re-verified against the live process table on load; if its pid no longer matches the same process, the stale entry is dropped rather than risking a resume on the wrong thing).
 
 ## Choosing a reasoner
 

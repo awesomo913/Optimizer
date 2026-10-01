@@ -91,6 +91,42 @@ def test_recent_events_orders_newest_first(db):
     assert events[1]["message"] == "first"
 
 
+def test_record_suspended_then_list_suspended_roundtrip(db):
+    db.record_suspended(pid=111, name="chrome.exe", create_time=1700000000.0)
+    db.record_suspended(pid=222, name="discord.exe", create_time=1700000050.0)
+
+    entries = db.list_suspended()
+
+    assert {e["pid"] for e in entries} == {111, 222}
+    chrome = next(e for e in entries if e["pid"] == 111)
+    assert chrome["name"] == "chrome.exe"
+    assert chrome["create_time"] == 1700000000.0
+
+
+def test_record_suspended_overwrites_the_same_pid(db):
+    db.record_suspended(pid=111, name="chrome.exe", create_time=1.0)
+    db.record_suspended(pid=111, name="chrome.exe", create_time=2.0)
+
+    entries = db.list_suspended()
+
+    assert len(entries) == 1
+    assert entries[0]["create_time"] == 2.0
+
+
+def test_remove_suspended_drops_only_that_pid(db):
+    db.record_suspended(pid=111, name="a.exe", create_time=1.0)
+    db.record_suspended(pid=222, name="b.exe", create_time=2.0)
+
+    db.remove_suspended(111)
+
+    entries = db.list_suspended()
+    assert [e["pid"] for e in entries] == [222]
+
+
+def test_list_suspended_empty_by_default(db):
+    assert db.list_suspended() == []
+
+
 def test_stats_counts_scans_snapshots_and_actions(db):
     scan_id = db.start_scan("kill", "", [], 0, "heuristic")
     id_a = db.add_process_snapshot(scan_id, make_row(pid=1))

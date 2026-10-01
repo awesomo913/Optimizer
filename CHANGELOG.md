@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **PID reuse protection.** Operating systems recycle process ids, so a pid captured at scan time could belong to an unrelated process by the time the user clicked OPTIMIZE. Every process row now carries `create_time`; `analyzer.apply_action` and `processes.kill`/`suspend`/`resume` re-fetch the live process and refuse if its `create_time` doesn't match, or it no longer exists.
+- **Live re-derivation at apply time.** `apply_action` now re-queries `active_windows`/`local_models` *live*, right before acting, instead of trusting only the scan-time `is_active`/`uses_local_model` flags — a process that became the foreground window or started talking to a local model after the scan is still refused.
+- **Suspended-process tracking is persisted**, not just kept in an in-memory dict in the GUI. It's written to the database on every successful suspend/resume/kill and reloaded on startup (`analyzer.load_suspended()`), with each entry re-verified against the live process table and dropped if it no longer matches — so **Resume Suspended** keeps working across a restart.
+- **Explicit self-protection.** The optimizer can never act on its own process or its parent (`os.getpid()`/`os.getppid()`, checked by pid regardless of reported name), and the frozen build's exe name (`OptimizerGUI.exe`) was added to `config.PROTECTED_NAMES`.
+
 ## [1.0.0] - 2026-09-30
 
 ### Added

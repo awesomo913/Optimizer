@@ -38,7 +38,10 @@ class OptimizerApp:
         self._chat_busy = False
         self._chat_history: list[dict] = []     # {'role','content'}
         self._chat_q: queue.Queue = queue.Queue()
-        self._suspended: dict[int, str] = {}    # pid -> name, for "Resume all"
+        # pid -> {"name": str, "create_time": float}, for "Resume Suspended".
+        # Persisted via self.db (suspended_processes table) so it survives a
+        # restart — see _load_persisted_suspended().
+        self._suspended: dict[int, dict] = {}
         self._resume_q: queue.Queue = queue.Queue()
 
         root.title("Local Device Optimizer")
@@ -49,6 +52,7 @@ class OptimizerApp:
         self._build_main_split()
         self._build_status_bar()
         self._refresh_key_state()
+        self._load_persisted_suspended()
 
     # ---- layout -------------------------------------------------------------
     def _build_top_bar(self) -> None:
@@ -415,9 +419,12 @@ class OptimizerApp:
                 done.append(name)
                 reclaimed += row.get("mem_mb", 0)
                 if mode == "suspend":
-                    self._suspended[pid] = name
+                    create_time = row.get("create_time")
+                    self._suspended[pid] = {"name": name, "create_time": create_time}
+                    self.db.record_suspended(pid, name, create_time)
                 elif mode == "kill":
                     self._suspended.pop(pid, None)
+                    self.db.remove_suspended(pid)
             else:
                 failed.append(f"{name} ({msg})")
         self._refresh_resume_button()
@@ -439,6 +446,13 @@ class OptimizerApp:
         self.root.after(200, self.on_scan)  # rescan -> table shows new state
 
     # ---- resume ---------------------------------------------------------------
+    def _load_persisted_suspended(self) -> None:
+        """Reload the suspended-processes list from the DB on startup so
+        "Resume Suspended" still works after a restart. See
+        analyzer.load_suspended() for the identity-verification logic."""
+        self._suspended = analyzer.load_suspended(self.db)
+        self._refresh_resume_button()
+
     def _refresh_resume_button(self) -> None:
         n = len(self._suspended)
         self.resume_btn.config(text=f"Resume Suspended ({n})",
@@ -447,15 +461,16 @@ class OptimizerApp:
     def on_resume_all(self) -> None:
         if self._busy or not self._suspended:
             return
-        pids = list(self._suspended)
-        self._set_busy(True, f"Resuming {len(pids)} suspended process(es)…")
-        threading.Thread(target=self._resume_worker, args=(pids,),
+        entries = [{"pid": pid, "name": info["name"], "create_time": info["create_time"]}
+                  for pid, info in self._suspended.items()]
+        self._set_busy(True, f"Resuming {len(entries)} suspended process(es)…")
+        threading.Thread(target=self._resume_worker, args=(entries,),
                          daemon=True).start()
         self.root.after(80, self._poll_resume)
 
-    def _resume_worker(self, pids: list[int]) -> None:
+    def _resume_worker(self, entries: list[dict]) -> None:
         try:
-            outcomes = analyzer.resume_pids(pids, self.db)
+            outcomes = analyzer.resume_pids(entries, self.db)
         except Exception as e:
             msg = str(e)
             logger.exception("resume_pids crashed")
@@ -474,8 +489,14 @@ class OptimizerApp:
             return
         resumed, failed = [], []
         for pid, ok, msg in outcomes:
-            name = self._suspended.pop(pid, str(pid))
-            (resumed if ok else failed).append(f"{name} ({msg})" if not ok else name)
+            info = self._suspended.get(pid, {})
+            name = info.get("name", str(pid))
+            if ok:
+                self._suspended.pop(pid, None)
+                self.db.remove_suspended(pid)
+                resumed.append(name)
+            else:
+                failed.append(f"{name} ({msg})")
         self._refresh_resume_button()
         lines = [f"Resumed {len(resumed)} process(es)."]
         if resumed:

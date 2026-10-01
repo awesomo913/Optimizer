@@ -35,6 +35,7 @@ PROTECTED_NAMES = {
     "securityhealthservice.exe", "securityhealthsystray.exe", "smartscreen.exe",
     "python.exe",  # don't let the optimizer kill itself / its own runtime
     "pythonw.exe",
+    "optimizergui.exe",  # the frozen PyInstaller build of this app (build.py)
 }
 
 # Substrings that mark a process as part of our own model stack — never touch.
