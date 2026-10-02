@@ -14,3 +14,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# Embedded SVG markup lines; wrapping them hurts readability.
+"scripts/make_social_preview.py" = ["E501"]

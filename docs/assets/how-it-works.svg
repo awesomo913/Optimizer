@@ -1,72 +1,64 @@
-<svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" role="img"
-     aria-label="Scan your windows and processes, then reason locally or via an optional cloud key, then apply only what clears three safety gates, then you can resume anything suspended.">
-  <rect width="1200" height="320" fill="#12161f"/>
-  <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#4d6a8a"/>
-    </marker>
-  </defs>
-
-  <!-- Step 1 -->
-  <g transform="translate(40,70)">
-    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
-    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
-          font-weight="700" fill="#e6edf3">1. Scan</text>
-    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">Your active windows,</text>
-    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">running processes, and</text>
-    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">any local AI models in use</text>
-    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
-          fill="#4ecca3">100% local, no network</text>
-  </g>
-  <line x1="285" y1="155" x2="330" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <!-- Step 2 -->
-  <g transform="translate(335,70)">
-    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
-    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
-          font-weight="700" fill="#e6edf3">2. Reason</text>
-    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">Local model (Ollama/LM</text>
-    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">Studio) if running, else</text>
-    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">offline heuristics</text>
-    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
-          fill="#a67c00">DeepSeek cloud only if you add a key</text>
-  </g>
-  <line x1="580" y1="155" x2="625" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <!-- Step 3 -->
-  <g transform="translate(630,70)">
-    <rect width="240" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
-    <text x="120" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
-          font-weight="700" fill="#e6edf3">3. Safety gate</text>
-    <text x="120" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">Protected, active-window,</text>
-    <text x="120" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">and model-connected</text>
-    <text x="120" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">processes are never touched</text>
-    <text x="120" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
-          fill="#4ecca3">checked 3 times, every time</text>
-  </g>
-  <line x1="875" y1="155" x2="920" y2="155" stroke="#4d6a8a" stroke-width="3" marker-end="url(#arrow)"/>
-
-  <!-- Step 4 -->
-  <g transform="translate(925,70)">
-    <rect width="235" height="170" rx="14" fill="#1b2230" stroke="#2a3444"/>
-    <text x="117" y="34" text-anchor="middle" font-family="Segoe UI, Arial" font-size="18"
-          font-weight="700" fill="#e6edf3">4. You decide</text>
-    <text x="117" y="64" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">You check boxes and click</text>
-    <text x="117" y="84" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">OPTIMIZE — suspend</text>
-    <text x="117" y="104" text-anchor="middle" font-family="Segoe UI, Arial" font-size="13"
-          fill="#8899aa">(reversible) or close</text>
-    <text x="117" y="140" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12"
-          fill="#4ecca3">nothing happens automatically</text>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-label="Four steps: scan your windows and processes locally, reason with a local model or offline heuristics, pass a safety gate checked three times, then you decide what to suspend or close.">
+<defs>
+<pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#39ff88" stroke-opacity="0.07" stroke-width="1"/></pattern>
+<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1.5" fill="#000" fill-opacity="0.28"/></pattern>
+<filter id="blur" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+</defs>
+<rect width="1200" height="400" fill="#050b07"/><rect width="1200" height="400" fill="url(#grid)"/>
+<line x1="24" y1="70" x2="1176" y2="70" stroke="#39ff88" stroke-opacity="0.45" stroke-width="3"/>
+<rect x="24" y="40" width="264" height="320" rx="6" fill="#020503" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="24" y="40" width="264" height="60" rx="6" fill="#08130d" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="25" y="80" width="262" height="20" fill="#08130d"/><line x1="24" y1="100" x2="288" y2="100" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<circle cx="52" cy="70" r="9" fill="#39ff88" filter="url(#blur)" opacity="0.8"/><circle cx="52" cy="70" r="7" fill="#39ff88"/>
+<text x="72" y="79" font-family="'Segoe UI',system-ui,sans-serif" font-size="26" font-weight="700" fill="#eafff2"><tspan font-family="Consolas,'Courier New',monospace" fill="#39ff88" font-size="22">01</tspan>  SCAN</text>
+<text x="48" y="144" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">Active windows,</text>
+<text x="48" y="174" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">running processes,</text>
+<text x="48" y="204" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">local AI models in use</text>
+<line x1="48" y1="262" x2="264" y2="262" stroke="#39ff88" stroke-opacity="0.25" stroke-dasharray="4 4"/>
+<circle cx="55" cy="296" r="6" fill="#39ff88"/>
+<text x="72" y="302" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">100% local,</text>
+<text x="72" y="330" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">no network</text>
+<rect x="320" y="40" width="264" height="320" rx="6" fill="#020503" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="320" y="40" width="264" height="60" rx="6" fill="#08130d" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="321" y="80" width="262" height="20" fill="#08130d"/><line x1="320" y1="100" x2="584" y2="100" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<circle cx="348" cy="70" r="9" fill="#39ff88" filter="url(#blur)" opacity="0.8"/><circle cx="348" cy="70" r="7" fill="#39ff88"/>
+<text x="368" y="79" font-family="'Segoe UI',system-ui,sans-serif" font-size="26" font-weight="700" fill="#eafff2"><tspan font-family="Consolas,'Courier New',monospace" fill="#39ff88" font-size="22">02</tspan>  REASON</text>
+<text x="344" y="144" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">Local model (Ollama /</text>
+<text x="344" y="174" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">LM Studio) if running,</text>
+<text x="344" y="204" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">else offline heuristics</text>
+<line x1="344" y1="262" x2="560" y2="262" stroke="#39ff88" stroke-opacity="0.25" stroke-dasharray="4 4"/>
+<circle cx="351" cy="296" r="6" fill="#ffb020"/>
+<text x="368" y="302" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#ffb020">DeepSeek cloud only</text>
+<text x="368" y="330" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#ffb020">if you add a key</text>
+<rect x="616" y="40" width="264" height="320" rx="6" fill="#020503" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="616" y="40" width="264" height="60" rx="6" fill="#08130d" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="617" y="80" width="262" height="20" fill="#08130d"/><line x1="616" y1="100" x2="880" y2="100" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<circle cx="644" cy="70" r="9" fill="#39ff88" filter="url(#blur)" opacity="0.8"/><circle cx="644" cy="70" r="7" fill="#39ff88"/>
+<text x="664" y="79" font-family="'Segoe UI',system-ui,sans-serif" font-size="26" font-weight="700" fill="#eafff2"><tspan font-family="Consolas,'Courier New',monospace" fill="#39ff88" font-size="22">03</tspan>  SAFETY GATE</text>
+<text x="640" y="144" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">Protected processes,</text>
+<text x="640" y="174" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">the active window and</text>
+<text x="640" y="204" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">model-connected ones</text>
+<text x="640" y="234" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">are never touched</text>
+<line x1="640" y1="262" x2="856" y2="262" stroke="#39ff88" stroke-opacity="0.25" stroke-dasharray="4 4"/>
+<circle cx="647" cy="296" r="6" fill="#39ff88"/>
+<text x="664" y="302" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">checked 3 times,</text>
+<text x="664" y="330" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">every time</text>
+<rect x="912" y="40" width="264" height="320" rx="6" fill="#020503" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="912" y="40" width="264" height="60" rx="6" fill="#08130d" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<rect x="913" y="80" width="262" height="20" fill="#08130d"/><line x1="912" y1="100" x2="1176" y2="100" stroke="#39ff88" stroke-opacity="0.4" stroke-width="1.5"/>
+<circle cx="940" cy="70" r="9" fill="#39ff88" filter="url(#blur)" opacity="0.8"/><circle cx="940" cy="70" r="7" fill="#39ff88"/>
+<text x="960" y="79" font-family="'Segoe UI',system-ui,sans-serif" font-size="26" font-weight="700" fill="#eafff2"><tspan font-family="Consolas,'Courier New',monospace" fill="#39ff88" font-size="22">04</tspan>  YOU DECIDE</text>
+<text x="936" y="144" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">Check boxes, click</text>
+<text x="936" y="174" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">OPTIMIZE: suspend</text>
+<text x="936" y="204" font-family="Consolas,'Courier New',monospace" font-size="18" fill="#cfeedd">(reversible) or close</text>
+<line x1="936" y1="262" x2="1152" y2="262" stroke="#39ff88" stroke-opacity="0.25" stroke-dasharray="4 4"/>
+<circle cx="943" cy="296" r="6" fill="#39ff88"/>
+<text x="960" y="302" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">nothing happens</text>
+<text x="960" y="330" font-family="Consolas,'Courier New',monospace" font-size="18" font-weight="700" fill="#39ff88">automatically</text>
+<circle cx="288" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/><circle cx="320" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/>
+<path d="M299.0 63L309.0 70L299.0 77Z" fill="#39ff88"/>
+<circle cx="584" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/><circle cx="616" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/>
+<path d="M595.0 63L605.0 70L595.0 77Z" fill="#39ff88"/>
+<circle cx="880" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/><circle cx="912" cy="70" r="5" fill="#050b07" stroke="#39ff88" stroke-width="2"/>
+<path d="M891.0 63L901.0 70L891.0 77Z" fill="#39ff88"/>
+<rect width="1200" height="400" fill="url(#scan)"/></svg>

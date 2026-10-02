@@ -1,4 +1,4 @@
-"""Generate docs/assets/icon-256.png and docs/assets/social-preview.png.
+"""Generate docs/assets/icon-256.png (social-preview.png comes from make_social_preview.py).
 
 One-off content-generation tool, not part of the app itself — its dependency
 (Pillow) is intentionally not in requirements.txt:
@@ -11,27 +11,16 @@ from __future__ import annotations
 import math
 import os
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "docs", "assets")
 
 BG = (18, 22, 31)
 PANEL = (27, 34, 48)
-MUTED = (136, 153, 170)
 FG = (230, 237, 243)
 TEAL = (78, 204, 163)
 DARK = (16, 20, 24)
-
-
-def _font(size: int, bold: bool = False):
-    candidates = (
-        ["C:/Windows/Fonts/segoeuib.ttf"] if bold else ["C:/Windows/Fonts/segoeui.ttf"]
-    ) + ["C:/Windows/Fonts/arial.ttf"]
-    for path in candidates:
-        if os.path.isfile(path):
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
 
 
 def draw_gauge_icon(size: int) -> Image.Image:
@@ -70,33 +59,10 @@ def make_icon() -> None:
     canvas.save(os.path.join(ASSETS, "icon-256.png"))
 
 
-def make_social_preview() -> None:
-    w, h = 1280, 640
-    img = Image.new("RGB", (w, h), BG)
-    d = ImageDraw.Draw(img)
-
-    gauge = draw_gauge_icon(300)
-    img.paste(gauge, (90, (h - 300) // 2), gauge)
-
-    title_font = _font(64, bold=True)
-    sub_font = _font(30)
-    tag_font = _font(26)
-
-    tx = 90 + 300 + 60
-    d.text((tx, 190), "Local Device", font=title_font, fill=FG)
-    d.text((tx, 265), "Optimizer", font=title_font, fill=FG)
-    d.text((tx, 350), "Find out why your PC is slow and safely", font=sub_font, fill=MUTED)
-    d.text((tx, 390), "pause what you don't need.", font=sub_font, fill=MUTED)
-    d.text((tx, 445), "Free  ·  Offline-first  ·  Open source", font=tag_font, fill=TEAL)
-
-    img.save(os.path.join(ASSETS, "social-preview.png"))
-
-
 def main() -> None:
     os.makedirs(ASSETS, exist_ok=True)
     make_icon()
-    make_social_preview()
-    print("Wrote icon-256.png and social-preview.png")
+    print("Wrote icon-256.png")
 
 
 if __name__ == "__main__":

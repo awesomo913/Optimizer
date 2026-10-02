@@ -37,11 +37,15 @@ DATA = [
     ("Local Device Optimizer", 0, "free, forever"),
 ]
 
-BG = "#12161f"
-FG = "#e6edf3"
-MUTED = "#8899aa"
-FREE_COLOR = "#4ecca3"
-PAID_COLOR = "#4d6a8a"
+# System-monitor identity: near-black green-tinted bg, phosphor green, amber.
+BG = "#050b07"
+FG = "#eafff2"
+MUTED = "#9fd9b6"
+FREE_COLOR = "#39ff88"
+PAID_COLOR = "#b87a14"
+GRID = "#143a24"  # faint phosphor grid, pre-blended over BG (opaque so label boxes hide it)
+
+plt.rcParams["font.family"] = ["Consolas", "DejaVu Sans Mono", "monospace"]
 
 
 def main() -> None:
@@ -80,9 +84,10 @@ def main() -> None:
                  pad=14, loc="left", fontweight="bold")
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color("#2a3444")
-    ax.xaxis.grid(True, color="#2a3444", linewidth=0.7, zorder=0)
+    ax.spines["bottom"].set_color(GRID)
+    ax.xaxis.grid(True, color=GRID, linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.5, zorder=0, alpha=0.6)
 
     fig.tight_layout()
 
